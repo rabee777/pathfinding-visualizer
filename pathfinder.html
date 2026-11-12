@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pathfinding Visualizer</title>
+<style>
+:root{--bg:#070816;--panel:#10132e;--ink:#e6f4ff;--mute:#8a93b8;--a:#5ee7ff;--line:rgba(140,160,255,.2);--wall:#2b2f66;--vis:#7a6bff;--path:#ffc65c;--s:#5ee7a0;--e:#ff5c8a;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root{--bg:#f2f5ff;--panel:#e4e9ff;--ink:#0d1030;--mute:#4b5380;--a:#0089b3;--line:rgba(60,70,160,.25);--wall:#39407f;--vis:#9d92ff;--path:#e69a00;--s:#0b9a5a;--e:#d4245a;color-scheme:light}}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px;max-width:760px;margin:auto}
+h1{font-size:1.6rem}p{color:var(--mute);margin:4px 0 14px}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button.go{background:var(--a);color:#06101e;border-color:var(--a);font-weight:600}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+#g{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none;user-select:none}
+#g div{aspect-ratio:1;background:var(--panel)}
+#g .w{background:var(--wall)}#g .v{background:var(--vis);transition:background .3s}#g .p{background:var(--path)}
+#g .s{background:var(--s)}#g .e{background:var(--e)}
+.info{margin-top:10px;color:var(--mute);font-size:14px;display:flex;gap:18px;flex-wrap:wrap}.info b{color:var(--ink)}
+</style>
+</head>
+<body>
+<h1>Pathfinding Visualizer</h1>
+<p>Draw walls by dragging on the grid, then watch the algorithm search for the shortest route from green to red.</p>
+<div class="ctl">
+<select id="alg" aria-label="Algorithm"><option value="bfs">Breadth-first search</option><option value="dfs">Depth-first search</option><option value="astar">A* search</option></select>
+<button id="go" class="go">Find path</button><button id="rnd">Random maze</button><button id="clr">Clear</button>
+</div>
+<div id="g" role="grid" aria-label="Pathfinding grid"></div>
+<div class="info"><span>Cells visited: <b id="vc">0</b></span><span>Path length: <b id="pl">–</b></span></div>
+<script>
+const R=18,C=26,$=id=>document.getElementById(id);
+const S=[2,2],E=[R-3,C-3];let wall=new Set(),busy=false,paintOn=null;
+const g=$("g");g.style.gridTemplateColumns=`repeat(${C},1fr)`;
+const cells=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++){const d=document.createElement("div");d.dataset.r=r;d.dataset.c=c;g.appendChild(d);cells.push(d)}
+const at=(r,c)=>cells[r*C+c],key=(r,c)=>r*C+c;
+function draw(){cells.forEach(d=>d.className="");wall.forEach(k=>cells[k].className="w");at(...S).className="s";at(...E).className="e";$("vc").textContent=0;$("pl").textContent="–"}
+function cellFrom(ev){const el=document.elementFromPoint(ev.clientX,ev.clientY);return el&&el.parentElement===g?el:null}
+g.addEventListener("pointerdown",ev=>{if(busy)return;const el=cellFrom(ev);if(!el)return;const k=key(+el.dataset.r,+el.dataset.c);if(k===key(...S)||k===key(...E))return;paintOn=!wall.has(k);toggle(el)});
+g.addEventListener("pointermove",ev=>{if(paintOn===null||busy)return;const el=cellFrom(ev);if(el)toggle(el)});
+addEventListener("pointerup",()=>paintOn=null);
+function toggle(el){const r=+el.dataset.r,c=+el.dataset.c,k=key(r,c);if(k===key(...S)||k===key(...E))return;paintOn?wall.add(k):wall.delete(k);el.className=paintOn?"w":""}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function nb(r,c){return[[r-1,c],[r,c+1],[r+1,c],[r,c-1]].filter(([a,b])=>a>=0&&b>=0&&a<R&&b<C&&!wall.has(key(a,b)))}
+function* search(type){const h=(r,c)=>Math.abs(r-E[0])+Math.abs(c-E[1]);
+const prev=new Map(),seen=new Set([key(...S)]),dist=new Map([[key(...S),0]]);let open=[[...S]];
+while(open.length){let cur;
+if(type==="bfs")cur=open.shift();else if(type==="dfs")cur=open.pop();
+else{open.sort((x,y)=>(dist.get(key(...x))+h(...x))-(dist.get(key(...y))+h(...y)));cur=open.shift()}
+yield cur;if(cur[0]===E[0]&&cur[1]===E[1]){const path=[];let k=key(...E);while(k!==undefined){path.push(k);k=prev.get(k)}return path.reverse()}
+for(const[a,b]of nb(...cur)){const k=key(a,b);if(type==="astar"){const d=dist.get(key(...cur))+1;if(!dist.has(k)||d<dist.get(k)){dist.set(k,d);prev.set(k,key(...cur));if(!seen.has(k)){seen.add(k);open.push([a,b])}}}
+else if(!seen.has(k)){seen.add(k);prev.set(k,key(...cur));open.push([a,b])}}}return null}
+async function run(){if(busy)return;busy=true;draw();let n=0;const it=search($("alg").value);let res;
+while(true){const s=it.next();if(s.done){res=s.value;break}const[r,c]=s.value;if(key(r,c)!==key(...S)&&key(r,c)!==key(...E))at(r,c).className="v";$("vc").textContent=++n;await sleep(12)}
+if(!res){$("pl").textContent="No path"}else{for(const k of res){if(k!==key(...S)&&k!==key(...E))cells[k].className="p";await sleep(35)}$("pl").textContent=res.length-1+" steps"}
+busy=false}
+$("go").onclick=run;
+$("clr").onclick=()=>{if(busy)return;wall.clear();draw()};
+$("rnd").onclick=()=>{if(busy)return;wall.clear();for(let r=0;r<R;r++)for(let c=0;c<C;c++){const k=key(r,c);if(k!==key(...S)&&k!==key(...E)&&Math.random()<.28)wall.add(k)}draw()};
+draw();
+</script>
+</body>
+</html>
